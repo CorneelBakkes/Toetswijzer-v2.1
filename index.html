@@ -117,7 +117,7 @@
 .follow-time{color:var(--muted);font-size:11px}
 .followup.past-item{color:#87818d}
 .followup.past-item .follow-label{color:#87818d}
-.source-note{font-size:12px;color:var(--muted);margin:10px 0 0}.progress-hint{display:inline-block;margin:8px 0 2px;padding:7px 10px;border-left:3px solid var(--purple);background:#f3eef6;color:#4d3552;font-size:13px;font-weight:650}.progress-warning{margin-bottom:0;border-left-color:#b67922;background:#fff7e9;color:#6e4a18}
+.source-note{font-size:12px;color:var(--muted);margin:10px 0 0}.progress-notices{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:10px 0 2px}.progress-hint{display:block;margin:0;padding:7px 10px;border-left:3px solid var(--purple);background:#f3eef6;color:#4d3552;font-size:13px;font-weight:650}.progress-warning{border-left-color:#b67922;background:#fff7e9;color:#6e4a18}
 .warning{font-size:12px;background:#fff7e9;border-left:3px solid #c09545;padding:8px 10px;color:#79551e;margin-top:12px;line-height:1.5}
 .round-footer{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid #ece6f0}
 .source-tag{font-size:10px;color:#8a7e91}
@@ -643,7 +643,7 @@ const mainEvent=r=>(r.events||[]).find(e=>e.kind===r.kind&&e.role===(r.kind==='s
 const fid=(data,e)=>'tw|'+data.year+'|'+e.id;
 function liveBundle(){const data=JSON.parse(document.getElementById('rooster-data').textContent),config=JSON.parse(document.getElementById('toetswijzer-config').textContent),archive=JSON.parse(document.getElementById('jaar-archief')?.textContent||'{}');return {root:{data,config},archive};}
 function selectedYear(requested){const b=liveBundle(),y=requested||new URLSearchParams(location.search).get('jaar');return clone(y&&b.archive[y]?b.archive[y]:b.root);}
-function selectYearHTML(year){const b=liveBundle(),years=[b.root.data.year,...Object.keys(b.archive)].sort().reverse();return '<label class="tw-year-picker">Collegejaar <select id="tw-year-select" aria-label="Kies collegejaar">'+years.map(y=>'<option value="'+y+'" '+(y===year?'selected':'')+'>'+y+'</option>').join('')+'</select></label>';}
+function selectYearHTML(year){const b=liveBundle(),years=[...new Set([year,b.root.data.year,...Object.keys(b.archive)])].sort().reverse();return '<label class="tw-year-picker">Collegejaar <select id="tw-year-select" aria-label="Kies collegejaar">'+years.map(y=>'<option value="'+y+'" '+(y===year?'selected':'')+'>'+y+'</option>').join('')+'</select></label>';}
 function genericSpec(kind){if(!X[kind])throw Error('Onbekend werkmaptype.');return X[kind];}
 async function readGeneric(bytes,kind){
  const files=await E.zipRead(bytes),info=E.bookInfo(files),ss=E.sharedStrings(files),s=genericSpec(kind),out={};
@@ -1042,17 +1042,20 @@ async function read(bytes,s){
  if(!info.sheets.Links)return legacy.read(bytes,s);
  for(const name of ['Momenten','Links','_Meta'])if(!info.sheets[name])throw Error('Tabblad '+name+' ontbreekt.');
  const metaCells=E.sheetCells(files,info.sheets._Meta,ss),meta={};for(let r=1;r<7;r++)meta[txt(metaCells.get('A'+r)?.v)]=txt(metaCells.get('B'+r)?.v);
- const readRows=(name,headers,cap)=>{const cells=E.sheetCells(files,info.sheets[name],ss);for(let j=0;j<headers.length;j++)if(txt(cells.get(E.col(j+1)+'5')?.v)!==headers[j])throw Error(name+': kolom '+headers[j]+' ontbreekt.');const rows=[];
+ const momentCells=E.sheetCells(files,info.sheets.Momenten,ss),yearChoice=txt(momentCells.get('B2')?.v);if(/^\d{4}-\d{4}$/.test(yearChoice))meta.Studiejaar=yearChoice;
+ const optionalMomentColumns=new Set(['Start inleveren — Eindtijd','Inlevermoment — Eindtijd','Controle']);
+ const readRows=(name,headers,cap)=>{const cells=name==='Momenten'?momentCells:E.sheetCells(files,info.sheets[name],ss),positions=new Map();for(let j=1;j<=80;j++){const heading=txt(cells.get(E.col(j)+'5')?.v);if(heading)positions.set(heading,j);}for(const heading of headers)if(!positions.has(heading)&&!(name==='Momenten'&&optionalMomentColumns.has(heading)))throw Error(name+': kolom '+heading+' ontbreekt.');const rows=[];
  for(const [addr,c] of cells){const m=addr.match(/^([A-Z]+)(\d+)$/);if(+m[2]>cap+5&&txt(c.v))throw Error('Invoer buiten capaciteit '+name);}
- for(let r=6;r<=cap+5;r++){const vals=headers.map((h,j)=>cells.get(E.col(j+1)+r)||{v:''});const inputs=name==='Momenten'?Array.from({length:headers.length-1},(_,j)=>j):[0,1,2,3];if(!inputs.some(j=>txt(vals[j].v)))continue;
- if(inputs.some(j=>vals[j].f||vals[j].t==='e'))throw Error(name+' rij '+r+': geen formules/fouten in invoervelden.');rows.push({row:r,values:vals.map(c=>c.v)});}return rows;};
+ for(let r=6;r<=cap+5;r++){const vals=headers.map(h=>positions.has(h)?cells.get(E.col(positions.get(h))+r)||{v:''}:{v:''});const inputs=name==='Momenten'?Array.from({length:headers.length-1},(_,j)=>j):[0,1,2,3];if(!inputs.some(j=>txt(vals[j].v)))continue;
+ if(inputs.some(j=>vals[j].f||vals[j].t==='e'))throw Error(name+' rij '+r+': geen formules/fouten in invoervelden.');rows.push({row:r,values:vals.map(c=>c.v),week:name==='Momenten'?txt(cells.get(E.col(positions.get('Opleidingsweek')||0)+r)?.v):''});}return rows;};
  return {simple:true,meta,date1904:info.date1904,rows:readRows('Momenten',D.headers,1200),links:readRows('Links',['Doelgroep','Toets','Progress-intekenlink','Gradework-resultaatlink'],200)};
 }
 const newId=()=> 'n-'+crypto.randomUUID();
 function validate(book,base,cfg,s){
  if(!book.simple){const legacyBase=clone(base);if(base.adminRevision==='v21-'+book.meta.Basisversie){legacyBase.adminRevision=book.meta.Basisversie;delete legacyBase.schemaVersion;}const p=legacy.validate(book,legacyBase,cfg,s);if(p.errors.length)return p;const m=D.migrate(p.data,p.config);return validateData(m.data,m.config,base,cfg);}
- const errors=[];if(book.meta.Formaat!=='toetswijzer-21')errors.push('Onjuist Excel-format.');if(book.meta.Basisversie!==base.adminRevision)errors.push('Deze Excel hoort bij een andere basisversie. Download de actuele Excel.');if(book.meta.Studiejaar!==base.year)errors.push('Collegejaar wijkt af.');
+ const hosted=!!s?.hosted,errors=[];if(book.meta.Formaat!=='toetswijzer-21')errors.push('Onjuist Excel-format.');if(!hosted&&book.meta.Basisversie!==base.adminRevision)errors.push('Deze Excel hoort bij een andere basisversie. Download de actuele Excel.');if(!hosted&&book.meta.Studiejaar!==base.year)errors.push('Collegejaar wijkt af.');
  const data=clone(base),config=clone(cfg),rounds=new Map(),known=new Map(base.rounds.map(r=>[r.id,r])),events=new Map(base.rounds.flatMap(r=>r.events.map(e=>[e.id,{r,e}]))),seen=new Set(),metadata=new Map();
+ if(hosted){if(!/^\d{4}-\d{4}$/.test(book.meta.Studiejaar||''))errors.push('Kies een geldig collegejaar in het invulblad.');else data.year=book.meta.Studiejaar;if(book.meta.Jaarstart){try{data.yearStart=typeof book.meta.Jaarstart==='number'?V.iso(book.meta.Jaarstart,book.date1904):V.iso(book.meta.Jaarstart);}catch(_){errors.push('Jaarstart is ongeldig.');}}}
  const date=v=>typeof v==='number'?V.iso(v,book.date1904):V.iso(v);
  const time=v=>typeof v==='number'&&v>=0&&v<1?String(Math.floor(Math.round(v*1440)/60)).padStart(2,'0')+':'+String(Math.round(v*1440)%60).padStart(2,'0'):txt(v);
  for(const row of book.rows){const a=row.values,at='Momenten rij '+row.row;try{
@@ -1060,7 +1063,7 @@ function validate(book,base,cfg,s){
   if(!D.needsChance(ids)&&txt(a[7]))throw Error('Laat Kans leeg; dit geldt alleen voor Uitfaserend Voltijd.');if(D.needsChance(ids)&&!['Eerste kans','Tweede kans'].includes(txt(a[7])))throw Error('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');
   let rid=txt(a[a.length-2])||newId();if(!/^[\w-]{1,100}$/.test(rid))throw Error('Ongeldige technische Ronde-ID.');if(txt(a[8])==='Vervallen')continue;
   const signature=JSON.stringify([ids,code,txt(a[7])]);if(metadata.has(rid)&&metadata.get(rid)!==signature)throw Error('Doelgroep, toets en kans moeten gelijk zijn binnen dezelfde ronde.');metadata.set(rid,signature);
-  let r=clone(known.get(rid)||{id:rid,notes:[],warnings:[],evls:[],themes:[],category:test.kind==='submit'?'Inleveren':'Toetsen'});Object.assign(r,{code,title:test.name,audiences:ids,attempt:txt(a[7]),events:[]});
+  let r=clone(known.get(rid)||{id:rid,notes:[],warnings:[],evls:[],themes:[],category:test.kind==='submit'?'Inleveren':'Toetsen'});Object.assign(r,{code,title:test.name,audiences:ids,attempt:txt(a[7]),events:[]});if(txt(row.week))r.week=txt(row.week);
   for(let ti=0;ti<D.types.length;ti++){const ty=D.types[ti],o=9+ti*4,has=[a[o],a[o+1],a[o+2],a[o+3]].some(v=>txt(v));if(!has)continue;if(!txt(a[o]))throw Error(ty.name+': datum is verplicht zodra je dit moment invult.');const prior=(known.get(rid)?.events||[]).find(e=>e.kind===ty.kind&&(e.role||'')===ty.role),eid=prior?.id||newId();if(seen.has(eid))throw Error('Dubbele Moment-ID.');seen.add(eid);const start=time(a[o+1]),end=time(a[o+2]);if(end&&!start)throw Error(ty.name+': eindtijd vereist een begintijd.');r.events.push({id:eid,kind:ty.kind,role:ty.role,label:ty.name,start:date(a[o]),end:date(a[o]),note:txt(a[o+3]),time:start+(end?' - '+end:'')});}
   if(!r.events.length)throw Error('Vul minimaal één momentdatum in.');rounds.set(rid,r);
  }catch(err){errors.push(at+': '+err.message);}}
@@ -1412,20 +1415,36 @@ return {create,buildHTML,passwordHash};
 })();
 </script>
 <script>
-(() => {
+(async () => {
     'use strict';
     const ORIGINAL_SOURCE = '<!doctype html>\n' + document.documentElement.outerHTML;
     const YEAR_SELECTION = window.TWV2.selectedYear();
-    const BASE_DATA = YEAR_SELECTION.data;
+    let BASE_DATA = YEAR_SELECTION.data;
+    let CFG = YEAR_SELECTION.config;
+    if (location.protocol !== 'file:') {
+        try {
+            const response = await fetch('Toetswijzer-invulbladen.xlsx', { cache: 'no-store' });
+            if (!response.ok)
+                throw Error('Excelbestand kon niet worden geladen.');
+            const workbook = await TWEngine.readWorkbook(await response.arrayBuffer(), { hosted: true });
+            const imported = TWEngine.validate(workbook, BASE_DATA, CFG, { hosted: true });
+            if (imported.errors.length)
+                throw Error(imported.errors[0]);
+            BASE_DATA = imported.data;
+            CFG = imported.config;
+        }
+        catch (error) {
+            console.warn('De Toetswijzer gebruikt de ingebouwde gegevens omdat het Excelbestand niet kon worden ingelezen.', error);
+        }
+    }
     const DATA = JSON.parse(JSON.stringify(BASE_DATA));
     DATA.rounds=DATA.rounds.filter(r=>!TW21.roundIssues(r,DATA.year).length).map(r=>({...r,events:(r.events||[]).filter(e=>TW21.type(e)?.student)}));
     // Restore shared defaults once, so the downloaded dataset need not repeat empty values.
     DATA.routes.forEach(r => { r.sub = r.sub || ''; r.phase = r.phase || ''; });
     Object.values(DATA.schedules).forEach(s => { s.extraInfo = s.extraInfo || []; s.showEvl = !!s.showEvl; s.officialUrl = s.officialUrl || ''; });
     DATA.rounds = DATA.rounds.map(r => ({ phase: [], themes: [], evls: [], notes: [], warnings: [], events: [], semester: '', period: '', week: '', attempt: '', context: '', entry: '', undatedText: '', primaryStart: null, primaryEnd: null, locked: false, registrationService: 'progress', submissionService: 'gradework', ...r, events: (r.events || []).map(e => ({ role: '', time: '', note: '', window: false, blocked: false, ...e })) }));
-    DATA.rounds.forEach(r=>{if(r.primaryStart)r.week=TW21.week(DATA,r.primaryStart,r.schedule);});
+    DATA.rounds.forEach(r=>{if(r.primaryStart&&!r.week)r.week=TW21.week(DATA,r.primaryStart,r.schedule);});
     DATA.aliases = DATA.aliases || {};
-    const CFG = YEAR_SELECTION.config;
     const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
     const esc = s => String(s !== null && s !== void 0 ? s : '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const uniq = a => [...new Set(a.filter(Boolean))];
@@ -1640,7 +1659,7 @@ return {create,buildHTML,passwordHash};
     function footer() { return `<footer class="footer"><span>Pabo Sittard - ${esc(DATA.year)}</span><span>Bijgewerkt ${esc(fmt(DATA.updated, true))}</span></footer>`; }
     function routeButtons() { return `<div class="routes" aria-label="Kies je rooster">${DATA.routes.map(r => action('route', `<strong>${esc(r.label)}</strong>${r.sub ? '<small>' + esc(r.sub) + '</small>' : ''}`, 'route ' + (r.id === state.route ? 'active' : ''), `data-route="${r.id}" aria-pressed="${r.id === state.route}"`)).join('')}</div>`; }
     const viewerNote = () => restricted ? '<p class="viewer-note">In deze tijdelijke viewer kun je lezen en je planner samenstellen. Downloads en afdrukken zijn uitgeschakeld; je selectie blijft alleen in deze geopende sessie.</p>' : '';
-    function schedulePage() { if (!state.route) return `<div class="kicker">Pabo Sittard - ${esc(DATA.year)}</div><h1 id="main-heading" tabindex="-1">Welkom bij de Toetswijzer</h1><p class="sub">Kies eerst jouw opleidingsvariant. Daarna zie je uitsluitend de toets- en inlevermomenten die voor jou relevant zijn.</p>${routeButtons()}`; const rows = visibleRows(), all = screenAll(), pastCount = all.filter(isPast).length; const unknown = rows.filter(r => !r.primaryStart).length; const nsub = rows.filter(r => r.kind === 'submit').length; const noEvl = !rows.some(r => r.evls.length || (['vt', 'dt'].includes(r.schedule) && r.code === 'PORT')); let h = `<div class="kicker">Pabo Sittard - ${esc(sched().label)} - ${esc(DATA.year)}</div><h1 id="main-heading" tabindex="-1">Jaaroverzicht${route().phase ? ' ' + esc(route().phase) + '-fase' : ''}</h1><p class="sub">Klik op een balk voor de deadlines en afnamegegevens. Vanuit die balk bekijk je ook alle momenten van dezelfde toets.</p><p class="progress-hint progress-warning"><strong>Let op!</strong> Controleer goed of je intekent voor de juiste toets.</p><p class="progress-hint">Log eerst in bij <a href="https://progresswww.nl/fontys/" target="_blank" rel="noopener noreferrer">Progress</a> om onderstaande links direct te kunnen volgen.</p>${routeButtons()}${BASE_DATA.rounds.some(r=>TW21.targets(r).includes(state.route)&&TW21.roundIssues(r,DATA.year).length)?'<p class="warning">Een aantal brongegevens wacht op controle van doelgroep of kans door beheer en wordt daarom nog niet als definitief moment getoond.</p>':''}<div class="refine-line">${action('filter', 'Verfijn overzicht', 'ghost')}</div>`; if (filterActive())
+    function schedulePage() { if (!state.route) return `<div class="kicker">Pabo Sittard - ${esc(DATA.year)}</div><h1 id="main-heading" tabindex="-1">Welkom bij de Toetswijzer</h1><p class="sub">Kies eerst jouw opleidingsvariant. Daarna zie je uitsluitend de toets- en inlevermomenten die voor jou relevant zijn.</p>${routeButtons()}`; const rows = visibleRows(), all = screenAll(), pastCount = all.filter(isPast).length; const unknown = rows.filter(r => !r.primaryStart).length; const nsub = rows.filter(r => r.kind === 'submit').length; const noEvl = !rows.some(r => r.evls.length || (['vt', 'dt'].includes(r.schedule) && r.code === 'PORT')); let h = `<div class="kicker">Pabo Sittard - ${esc(sched().label)} - ${esc(DATA.year)}</div><h1 id="main-heading" tabindex="-1">Jaaroverzicht${route().phase ? ' ' + esc(route().phase) + '-fase' : ''}</h1><p class="sub">Klik op een balk voor de deadlines en afnamegegevens. Vanuit die balk bekijk je ook alle momenten van dezelfde toets.</p><div class="progress-notices"><p class="progress-hint">Log eerst in bij <a href="https://progresswww.nl/fontys/" target="_blank" rel="noopener noreferrer">Progress</a> om onderstaande links direct te kunnen volgen.</p><p class="progress-hint progress-warning"><strong>Let op!</strong> Controleer goed of je intekent voor de juiste toets.</p></div>${routeButtons()}${BASE_DATA.rounds.some(r=>TW21.targets(r).includes(state.route)&&TW21.roundIssues(r,DATA.year).length)?'<p class="warning">Een aantal brongegevens wacht op controle van doelgroep of kans door beheer en wordt daarom nog niet als definitief moment getoond.</p>':''}<div class="refine-line">${action('filter', 'Verfijn overzicht', 'ghost')}</div>`; if (filterActive())
         h += `<div class="filter-bar"><span><strong>Je selectie:</strong> ${esc(describeFilters())}</span>${action('reset-filter', 'Terug naar het hele rooster', 'ghost')}</div>`; h += `<div class="toolbar"><div><h2 aria-live="polite">${rows.length} ${state.past ? 'momenten' : 'komende momenten'}</h2><div class="meta">${nsub} inlevermomenten - ${rows.length - nsub - unknown} toetsafnames${unknown ? ' - ' + unknown + ' nog zonder datum' : ''}</div></div><div class="actions">${action('select-mode', state.selecting ? 'Stop selecteren' : 'Mijn jaarplanner maken', 'btn primary')}${action('toggle-all', rows.length && rows.every(r => state.open.has(r.id)) ? 'Alles inklappen' : 'Alles uitklappen')}${action('print', 'Printen / PDF', 'btn', restricted ? 'disabled' : '')}</div></div>`; if (state.selecting)
         h += plannerBar(); h += `<div class="status-help"><span>Het label <span class="badge red">Nu actie</span> geeft aan dat een belangrijk moment deze of volgende week plaatsvindt. Rood markeert een naderende intekendeadline. Controleer je persoonlijke inschrijfstatus altijd in Progress.</span><label class="checkline"><input id="hide-past" type="checkbox" ${!state.past ? 'checked' : ''}>Verberg eerdere momenten (${pastCount})</label></div>`; h += `<section class="${noEvl ? 'no-evl ' : ''}${state.selecting ? 'selecting' : ''}" aria-label="Toets- en inlevermomenten">${rows.length ? list(rows) : '<div class="empty"><h2>Geen momenten bij deze selectie</h2><p>Zet Verberg eerdere momenten uit of pas je selectie aan. Dit is geen bewijs dat een toets niet bestaat.</p>' + action('filter', 'Selectie aanpassen', 'btn primary') + '</div>'}</section>`; if (sched().extraInfo.length)
         h += `<div class="extra-info">${action('extra-info', 'Overige roosterinformatie zonder bevestigde toetskoppeling', 'ghost')}<span class="meta">Niet automatisch aan een toets toegewezen.</span></div>`; h += footer(); return h; }
