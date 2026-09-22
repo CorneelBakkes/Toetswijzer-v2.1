@@ -1331,7 +1331,7 @@ V.writeGeneric=async(kind,rows)=>{
     function list(rs) { let out = '', sem = '', per = ''; for (const r of rs) {
         let [k, title, p] = state.page === 'planner' ? [r.sortDate.slice(0, 7), r.primaryStart ? localDate(r.sortDate).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }) : 'Planning volgt', ''] : groupKey(r);
         if (k !== sem) {
-            out += `<h3 class="group-sem">${esc(title)}</h3><div class="legend"><span>Collegeweek</span><span>Wanneer</span><span>Onderdeel</span><span class="right">Gekoppelde EvL’s</span><span></span></div>`;
+            out += `<h3 class="group-sem">${esc(title)}</h3><div class="legend"><span>Collegeweek</span><span>Wanneer</span><span>Onderdeel</span><span class="right"></span><span></span></div>`;
             sem = k;
             per = '';
         }
