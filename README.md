@@ -1,17 +1,19 @@
-# Toetswijzer
+# Toetswijzer Pabo Sittard
 
-De Toetswijzer voor Pabo Sittard.
+De Toetswijzer toont studenten de toetsafnames, intekenperioden, inleverperioden en beoordelingsmomenten voor hun opleidingsvariant.
 
-## Start
+## Website
 
-Open de gepubliceerde site: https://corneelbakkes.github.io/Toetswijzer-v2-test/
+https://corneelbakkes.github.io/Toetswijzer-v2.1/
 
-## Beheer
+## Planning bijwerken
 
-Gebruik de beheerknop rechtsonder in de Toetswijzer. De Excel is bedoeld voor bulkbeheer en import/export.
+`Toetswijzer-invulbladen.xlsx` is de bron voor de planning en de toetslinks. Werk de tabbladen **Momenten** en **Links** bij en vervang daarna het bestand op GitHub met exact dezelfde bestandsnaam. De website leest het bestand bij het openen opnieuw in.
+
+Pas `index.html` alleen aan voor wijzigingen aan de website zelf.
 
 ## Bestanden
 
-- `index.html` — de gepubliceerde Toetswijzer
-- `Toetswijzer-invulbladen.xlsx` — beheer-Excel
-- [Handleiding](Handleiding.html) — werkwijze voor beheer
+- `index.html` — de gepubliceerde website;
+- `Toetswijzer-invulbladen.xlsx` — planning, doelgroepen en links;
+- `Handleiding.html` — korte uitleg voor het beheren van het Excelbestand.
