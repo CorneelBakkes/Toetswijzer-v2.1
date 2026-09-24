@@ -927,7 +927,31 @@ const week=(data,date,schedule)=>{
  return known.length===1?known[0]:'Kalender ontbreekt';
 };
 const day=date=>new Intl.DateTimeFormat('nl-NL',{weekday:'long',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
-function roundIssues(r,year){const out=[];if(!allowed(r.code,targets(r),year))out.push('Toets/doelgroep of geldigheidsjaar past niet bij de catalogus.');if(needsChance(targets(r))&&!['Eerste kans','Tweede kans','Derde kans'].includes(r.attempt))out.push('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');return out;}
+function roundIssues(r,year){
+  const out=[];
+  const ids=targets(r);
+  const t=test(r.code);
+
+  // Harde fout: toets bestaat niet in de catalogus.
+  if(!t){
+    out.push('Toets bestaat niet in de catalogus.');
+  }
+
+  // Harde fout: toets bestaat wel, maar hoort niet bij deze doelgroep.
+  else if(!ids.length || !ids.every(id=>t.targets.includes(id))){
+    out.push('Toets/doelgroep past niet bij de catalogus.');
+  }
+
+  // Een verlopen geldigheidsjaar is hier bewust GEEN harde fout.
+  // Bij een collegejaarovergang mag zo'n oude toets de planning
+  // niet volledig blokkeren.
+
+  if(needsChance(ids) && !['Eerste kans','Tweede kans'].includes(r.attempt)){
+    out.push('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');
+  }
+
+  return out;
+}
 function sync(r){r.outlookBaseAudience??=targets(r)[0];const t=test(r.code);if(t){r.code=t.code;r.title=t.name;r.kind=t.kind;if(!r.evlsManaged)r.evls=targets(r).some(id=>tgo.includes(id))?clone(t.evls):[];}const a=audiences.find(a=>a.id===targets(r)[0]);if(a){r.schedule=a.schedule;r.phase=[...new Set(targets(r).map(id=>audiences.find(a=>a.id===id)?.phase).filter(Boolean))];}if(!needsChance(targets(r)))delete r.attempt;const pe=(r.events||[]).find(e=>e.kind===r.kind&&e.role===(r.kind==='submit'?'deadline':'primary'));r.primaryStart=pe?.start||null;r.primaryEnd=pe?.end||null;r.sortDate=pe?.start||r.events?.[0]?.start||'9999-12-31';return r;}
 function publicRecord(c){const n=clone(c);n.events=(n.events||[]).filter(e=>e.kind!=='assess');n.fields=(n.fields||[]).filter(f=>!/^Beoordeling(?:sdeadline|-start|-eindmoment)/i.test(f.field));delete n.previous;return n;}
 function migrate(base,cfg){
@@ -948,7 +972,7 @@ function migrate(base,cfg){
 const eventFields=['Datum','Begintijd','Eindtijd','Toelichting'];
 const headers=['Toets',...audiences.map(a=>'Doelgroep: '+a.label),'Kans','Status',...types.flatMap(t=>eventFields.map(f=>t.name+' — '+f)),'Ronde-ID','Controle'];
 function rows(data){return data.rounds.map(r=>{const out=[r.code+' — '+r.title,...audiences.map(a=>targets(r).includes(a.id)?'Ja':''),needsChance(targets(r))?r.attempt||'':'','Actief'];for(const t of types){const e=(r.events||[]).find(x=>x.kind===t.kind&&(x.role||'')===t.role);const m=(e?.time||'').match(/^(\d{1,2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?$/);out.push(e?.start||'',m?m[1].padStart(5,'0'):'',m?.[2]?.padStart(5,'0')||'',e?.note||'');}out.push(r.id,roundIssues(r,data.year).join(' '));return out;});}
-return {clone,audiences,aliases,tests,types,colors,descriptions,normalizeCode,test,type,targets,label,groupLabel,groups,needsChance,allowed,chance,title,validURL,link,week,day,roundIssues,sync,migrate,eventFields,headers,rows,publicRecord};
+return {clone,audiences,aliases,tests,types,colors,descriptions,normalizeCode,test,type,targets,label,groupLabel,groups,needsChance,allowedTarget,allowedYear,allowed,chance,title,validURL,link,week,day,roundIssues,sync,migrate,eventFields,headers,rows,publicRecord};
 })();
 </script>
 <script id="simple-engine">/* Adapter to the original v2 engine: stable records and the simplified workbook. */
