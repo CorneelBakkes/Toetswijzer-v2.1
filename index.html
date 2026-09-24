@@ -647,8 +647,8 @@ async function readPlanningWorkbook(bytes,base,cfg){
    let ids=targetIds;
    if(targets.length){ids=targets.filter(([,n])=>{const v=text(get(n));if(v&&!['Ja','Nee'].includes(v))errors.push(name+' rij '+row+': doelgroep moet Ja, Nee of leeg zijn.');return v==='Ja';}).map(([h])=>audienceHeaders[h]);}
    if(!ids.length){errors.push(name+' rij '+row+': kies minimaal één doelgroep.');continue;}
-   if(!TW21.allowed(test.code,ids,year)){errors.push(name+' rij '+row+': toets en doelgroep passen niet bij de catalogus of het studiejaar.');continue;}
-   let attempt='';if(name==='Uitfaserend VT'){attempt=text(get(3));if(!['Eerste kans','Tweede kans'].includes(attempt)){errors.push(name+' rij '+row+': kies Eerste kans of Tweede kans.');continue;}}
+   if(!TW21.allowedTarget(test.code,ids)){   errors.push(name+' rij '+row+': toets en doelgroep passen niet bij de catalogus.');   continue; }  if(!TW21.allowedYear(test.code,year)){   warnings.push(     name+' rij '+row+': '+test.name+     ' is niet meer geldig in '+year+     ' en is daarom overgeslagen.'   );   continue; }
+   let attempt='';if(name==='Uitfaserend VT'){attempt=text(get(3));if(!['Eerste kans','Tweede kans','Derde kans'].includes(attempt)){errors.push(name+' rij '+row+': kies Eerste kans of Tweede kans.');continue;}}
    if(status==='Vervallen'){warnings.push(name+' rij '+row+': vervallen en niet op studentkaarten geplaatst.');continue;}
    const round={id:'plan-'+year+'-'+schedule+'-'+test.code.toLowerCase()+'-'+row,audiences:ids,code:test.code,title:test.name,attempt,events:eventRows};TW21.sync(round);round.events.forEach((e,i)=>e.id=round.id+'-m'+(i+1));rounds.push(round);
   }
@@ -914,7 +914,7 @@ const groups=Array.from({length:63},(_,i)=>audiences.filter((a,j)=>(i+1)&(1<<j))
 // Alleen het uitfaserende voltijdcurriculum kent Eerste/Tweede kans.
 // Deeltijd uitfaserend toont en bewaart nooit een kans-aanduiding.
 const needsChance=ids=>ids.includes('vtu');
-const allowed=(code,ids,year)=>!!ids.length&&!!test(code)&&ids.every(id=>test(code).targets.includes(id))&&(!test(code).until||year<=test(code).until);
+const allowedTarget=(code,ids)=>   !!ids.length &&   !!test(code) &&   ids.every(id=>test(code).targets.includes(id));  const allowedYear=(code,year)=>   !!test(code) &&   (!test(code).until || year<=test(code).until);  const allowed=(code,ids,year)=>   allowedTarget(code,ids) &&   allowedYear(code,year);
 const chance=(r,id)=>id==='vtu'?r.attempt||'':'';
 const title=(r,e,id)=>[r.code,label(id),chance(r,id),type(e)?.name||e.label].filter(Boolean).join(' | ');
 const validURL=s=>{if(!s)return true;try{const u=new URL(s);return u.protocol==='https:'&&!u.username&&!u.password&&!/[\r\n]/.test(s)&&s===s.trim();}catch{return false;}};
@@ -927,7 +927,7 @@ const week=(data,date,schedule)=>{
  return known.length===1?known[0]:'Kalender ontbreekt';
 };
 const day=date=>new Intl.DateTimeFormat('nl-NL',{weekday:'long',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
-function roundIssues(r,year){const out=[];if(!allowed(r.code,targets(r),year))out.push('Toets/doelgroep of geldigheidsjaar past niet bij de catalogus.');if(needsChance(targets(r))&&!['Eerste kans','Tweede kans'].includes(r.attempt))out.push('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');return out;}
+function roundIssues(r,year){const out=[];if(!allowed(r.code,targets(r),year))out.push('Toets/doelgroep of geldigheidsjaar past niet bij de catalogus.');if(needsChance(targets(r))&&!['Eerste kans','Tweede kans','Derde kans'].includes(r.attempt))out.push('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');return out;}
 function sync(r){r.outlookBaseAudience??=targets(r)[0];const t=test(r.code);if(t){r.code=t.code;r.title=t.name;r.kind=t.kind;if(!r.evlsManaged)r.evls=targets(r).some(id=>tgo.includes(id))?clone(t.evls):[];}const a=audiences.find(a=>a.id===targets(r)[0]);if(a){r.schedule=a.schedule;r.phase=[...new Set(targets(r).map(id=>audiences.find(a=>a.id===id)?.phase).filter(Boolean))];}if(!needsChance(targets(r)))delete r.attempt;const pe=(r.events||[]).find(e=>e.kind===r.kind&&e.role===(r.kind==='submit'?'deadline':'primary'));r.primaryStart=pe?.start||null;r.primaryEnd=pe?.end||null;r.sortDate=pe?.start||r.events?.[0]?.start||'9999-12-31';return r;}
 function publicRecord(c){const n=clone(c);n.events=(n.events||[]).filter(e=>e.kind!=='assess');n.fields=(n.fields||[]).filter(f=>!/^Beoordeling(?:sdeadline|-start|-eindmoment)/i.test(f.field));delete n.previous;return n;}
 function migrate(base,cfg){
@@ -1033,7 +1033,7 @@ function validate(book,base,cfg,s){
  for(const row of book.rows){const a=row.values,at='Momenten rij '+row.row;try{
   if(!a.slice(9,9+D.types.length*4).some(v=>txt(v)))continue;
   const ids=D.audiences.filter((x,i)=>txt(a[i+1]).toLowerCase()==='ja').map(x=>x.id);if(!ids.length)throw Error('Kies minimaal één doelgroep door Ja in te vullen.');const code=D.normalizeCode(txt(a[0]).split(' — ')[0]),test=D.test(code);if(!test)throw Error('Kies een geldige toets.');if(!['Actief','Vervallen'].includes(txt(a[8])))throw Error('Kies Actief of Vervallen.');
-  if(!D.needsChance(ids)&&txt(a[7]))throw Error('Laat Kans leeg; dit geldt alleen voor Uitfaserend Voltijd.');if(D.needsChance(ids)&&!['Eerste kans','Tweede kans'].includes(txt(a[7])))throw Error('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');
+  if(!D.needsChance(ids)&&txt(a[7]))throw Error('Laat Kans leeg; dit geldt alleen voor Uitfaserend Voltijd.');if(D.needsChance(ids)&&!['Eerste kans','Tweede kans','Derde kans'].includes(txt(a[7])))throw Error('Kies Eerste kans of Tweede kans voor Uitfaserend Voltijd.');
   if(txt(a[8])==='Vervallen')continue;
   let rid=txt(a[a.length-2]);if(!rid){const signature=JSON.stringify([data.year,code,ids,txt(a[7]),a.slice(9,9+D.types.length*4).map(txt)]),fingerprint=stableId(signature),occurrence=(generated.get(fingerprint)||0)+1;generated.set(fingerprint,occurrence);rid='excel-'+fingerprint+'-'+occurrence;}
   if(!/^[\w-]{1,100}$/.test(rid))throw Error('Ongeldige technische Ronde-ID.');if(roundIds.has(rid))throw Error('Deze Ronde-ID staat op meerdere regels. Laat de Ronde-ID leeg bij een nieuw moment.');roundIds.add(rid);
