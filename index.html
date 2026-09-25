@@ -1152,6 +1152,68 @@ V.writeGeneric=async(kind,rows)=>{
     DATA.routes.forEach(r => { r.sub = r.sub || ''; r.phase = r.phase || ''; });
     Object.values(DATA.schedules).forEach(s => { s.extraInfo = s.extraInfo || []; s.showEvl = !!s.showEvl; s.officialUrl = s.officialUrl || ''; });
     DATA.rounds = DATA.rounds.map(r => ({ phase: [], themes: [], evls: [], notes: [], warnings: [], events: [], semester: '', period: '', week: '', attempt: '', context: '', entry: '', undatedText: '', primaryStart: null, primaryEnd: null, locked: false, registrationService: 'progress', submissionService: 'gradework', ...r, events: (r.events || []).map(e => ({ role: '', time: '', note: '', window: false, blocked: false, ...e })) }));
+    // HTT blijft in Excel per afnamevariant vastgelegd. Voor studenten tonen we per datum/doelgroep
+    // één ronde met het volledige afnamebereik; de afzonderlijke reguliere/X-klastijden blijven
+    // zichtbaar in de toelichting. De brondata zelf wordt hiermee niet gewijzigd.
+    function mergeHttStudentRounds(list) {
+        const httCodes = new Set(['HTT', 'HTT3']);
+        const passthrough = [], grouped = new Map();
+        const primary = r => (r.events || []).find(e => e.kind === 'exam' && e.role === 'primary');
+        const parseRanges = value => [...String(value || '').matchAll(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/g)].map(m => [m[1].padStart(5, '0'), m[2].padStart(5, '0')]);
+        const targetsKey = r => TW21.targets(r).slice().sort().join(',');
+        const cleanVariantNote = value => String(value || '').replace(/\bX[- ]klas\b\s*[;,:-]?\s*/ig, '').trim().replace(/^[.;,\s]+|[.;,\s]+$/g, '');
+        for (const r of list) {
+            const p = primary(r);
+            if (!httCodes.has(r.code) || !p || !r.primaryStart) { passthrough.push(r); continue; }
+            const key = [r.code, r.schedule, r.primaryStart, targetsKey(r), r.semester || '', r.period || '', r.week || ''].join('|');
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(r);
+        }
+        const merged = [...passthrough];
+        for (const group of grouped.values()) {
+            const base = clone(group[0]);
+            const primaries = group.flatMap(r => (r.events || []).filter(e => e.kind === 'exam' && e.role === 'primary'));
+            const variants = [];
+            for (const e of primaries) {
+                const ranges = parseRanges(e.time);
+                if (ranges.length > 1) {
+                    ranges.forEach((pair, i) => variants.push({ start: pair[0], end: pair[1], note: e.note || '', explicitX: false, sourceIndex: i }));
+                } else if (ranges.length === 1) {
+                    variants.push({ start: ranges[0][0], end: ranges[0][1], note: e.note || '', explicitX: /x[- ]klas/i.test(e.note || ''), sourceIndex: 0 });
+                }
+            }
+            if (group.length === 1 && variants.length < 2) { merged.push(base); continue; }
+            if (!variants.length) { merged.push(base); continue; }
+            variants.sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+            const starts = variants.map(v => v.start).sort(), ends = variants.map(v => v.end).sort();
+            const broadTime = starts[0] + ' - ' + ends[ends.length - 1];
+            const extraNotes = [...new Set(variants.map(v => cleanVariantNote(v.note)).filter(Boolean))];
+            const detailParts = variants.map((v, i) => {
+                const label = v.explicitX || i === variants.length - 1 && variants.length > 1 ? (i === 0 ? 'Regulier' : 'X-klas') : (i === 0 ? 'Regulier' : 'Variant ' + (i + 1));
+                return label + ': ' + v.start + ' - ' + v.end + '.';
+            });
+            const mergedPrimary = { ...primaries[0], time: broadTime, note: [...detailParts, ...extraNotes].join(' ') };
+            const seen = new Set(), nonPrimary = [];
+            for (const r of group) for (const e of (r.events || [])) {
+                if (e.kind === 'exam' && e.role === 'primary') continue;
+                const k = [e.kind, e.role, e.start, e.end, e.time, e.note, e.label].join('|');
+                if (!seen.has(k)) { seen.add(k); nonPrimary.push(clone(e)); }
+            }
+            base.events = [...nonPrimary, mergedPrimary];
+            base.phase = [...new Set(group.flatMap(r => r.phase || []))];
+            base.themes = [...new Set(group.flatMap(r => r.themes || []))];
+            base.evls = [...new Set(group.flatMap(r => r.evls || []))];
+            base.notes = [...new Set(group.flatMap(r => r.notes || []))];
+            base.warnings = [...new Set(group.flatMap(r => r.warnings || []))];
+            base.audiences = [...new Set(group.flatMap(r => r.audiences || []))];
+            base.primaryStart = group.map(r => r.primaryStart).filter(Boolean).sort()[0] || base.primaryStart;
+            base.primaryEnd = group.map(r => r.primaryEnd).filter(Boolean).sort().slice(-1)[0] || base.primaryEnd;
+            base.sortDate = base.primaryStart || base.sortDate;
+            merged.push(base);
+        }
+        return merged;
+    }
+    DATA.rounds = mergeHttStudentRounds(DATA.rounds);
     DATA.aliases = DATA.aliases || {};
     const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
     const esc = s => String(s !== null && s !== void 0 ? s : '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
