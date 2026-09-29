@@ -1336,7 +1336,7 @@ V.writeGeneric=async(kind,rows)=>{
         const links=(service?serviceButton(r,service,service==='progress'?'Open Progress':'Open GradeWork'):'')+
             (start?agendaButton(r,kind,periodAgendaLabel):'')+
             (deadline?agendaButton(r,deadline.id,'Deadline in agenda'):'' );
-        return '<div class="moment-card period-card '+(eventPast(last)?'past-item':'')+'"><div class="moment-info"><span class="moment-label">'+esc(title)+'</span><strong>'+esc(when)+'</strong>'+
+        return '<div class="moment-card period-card '+(eventPast(last)?'past-item':'')+'"><div class="moment-info"><span class="moment-label">'+esc(title)+'</span><strong>'+esc(when)+(kind==='submit'&&start&&start.time?' · Start inleveren '+esc(start.time):'')+(kind==='submit'&&deadline&&deadline.time?' · Inleverdeadline '+esc(deadline.time):'')+'</strong>'+
             
             
             '</div><div class="moment-actions">'+links+'</div></div>';
