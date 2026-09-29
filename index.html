@@ -1337,8 +1337,8 @@ V.writeGeneric=async(kind,rows)=>{
             (start?agendaButton(r,kind,periodAgendaLabel):'')+
             (deadline?agendaButton(r,deadline.id,'Deadline in agenda'):'' );
         return '<div class="moment-card period-card '+(eventPast(last)?'past-item':'')+'"><div class="moment-info"><span class="moment-label">'+esc(title)+'</span><strong>'+esc(when)+'</strong>'+
-            (start?'<span class="moment-note"><b>Start:</b> '+esc(detail(start))+'</span>':'')+
-            (deadline?'<span class="moment-note"><b>'+esc(deadlineLabel)+':</b> '+esc(detail(deadline))+'</span>':'')+
+            
+            
             '</div><div class="moment-actions">'+links+'</div></div>';
     }
     function studentMomentRange(r,e,short=false){if(r.code!=='RWT'||e.kind!=='exam'||e.start!==e.end)return range(e.start,e.end,short);const d=new Date(e.start+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);const monday=d.toISOString().slice(0,10);d.setUTCDate(d.getUTCDate()+4);return range(monday,d.toISOString().slice(0,10),short);} function timeline(r) {
